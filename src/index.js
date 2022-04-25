@@ -1,26 +1,27 @@
 /* Imports. */
-import * as util from "util";
-import * as fs from "fs";
-import * as os from "os";
-import * as fse from "fs-extra";
-import * as unzip from "unzipper";
-import * as readline from "readline-sync";
+const util = require('util');
+const fs = require('fs');
+const os = require('os');
+const fse = require('fs-extra');
+const stream = require('stream');
+const unzip = require('unzipper');
+const readline = require('readline-sync');
+const fetch = require('node-fetch');
 
-import fetch from "node-fetch"; 
-import {fullArchive} from "node-7z-archive";
-import {exec} from "child_process";
+const {extractFull} = require('node-7z');
+const {exec} = require('child_process');
 
 /* Constants. */
 const tempDirectory = os.tmpdir();
 const installPath = `${process.env.LOCALAPPDATA}/Grasscutters`;
 const execute = util.promisify(exec);
+const streamPipeline = util.promisify(stream.pipeline);
+const pathTo7zip = require('7zip-bin').path7za;
 
 /* Localization. */
-import * as enUS from "../resources/en-US.json";
-import * as zhCN from "../resources/zh-CN.json";
-let languages = {
-    en: enUS.default,
-    cn: zhCN.default
+const languages = {
+    en: require("../resources/en-US.json"),
+    cn: require("../resources/zh-CN.json")
 };
 
 let messages = undefined;
@@ -40,9 +41,14 @@ async function downloadAndInstall(application, file, installCallback = undefined
     const downloadUrl = asDownload("Grasscutters", application, file);
     
     const response = await fetch(downloadUrl);
-    response.body.pipe(fs.createWriteStream(`${tempDirectory}/${file}`));
+    await streamPipeline(response.body, fs.createWriteStream(`${tempDirectory}/${file}`));
     
     if(installCallback) await installCallback(`${tempDirectory}/${file}`);
+}
+
+async function extractTo(file, destination) {
+    const contents = fs.createReadStream(file);
+    contents.pipe(unzip.Extract({path: destination}));
 }
 
 function exit() {
@@ -124,25 +130,28 @@ async function installGrassclipper() {
     const response = await fetch(downloadUrl);
     
     console.log("GrassClipper has started installing. This may take a while.");
-    response.body.pipe(unzip.Extract({path: `${installPath}`}));
+    await streamPipeline(response.body, unzip.Extract({path: `${installPath}`}));
+    console.log("Finished downloading & extracting archive!");
     
     console.log("Finished installing GrassClipper!"); exit();
 }
 
-async function installGrassclipperX() {
+async function installGrassclipperX(file) {
     console.clear();
-
-    const downloadUrl = asDownload("Grasscutters", "GrassClipper-X", "GrassClipper-X-1.0.0-win-x64.7z");
-    const response = await fetch(downloadUrl);
-
     console.log("GrassClipper has started installing. This may take a while.");
-    response.body.pipe(fs.createWriteStream(`${installPath}/GrassClipper-X.7z`));
     
     console.log("Extracting archive...");
-    await fullArchive(`${installPath}/GrassClipper-X.7z`, `${installPath}/GrassClipper-X`);
-    console.log("Finished extracting archive!");
+    const extract = extractFull(file, `${installPath}/GrassClipper-X`, {$bin: pathTo7zip});
     
-    console.log("Finished installing GrassClipper!"); exit();
+    extract.on('end', () => {
+        console.log("Finished extracting archive!");
+        
+        // Cleanup.
+        console.log("Cleaning up...");
+        fs.unlinkSync(`${tempDirectory}/GrassClipper-X-1.0.0-win-x64.7z`);
+        
+        console.log("Finished installing GrassClipper!"); exit();
+    });
 }
 
 /* Screens. */
@@ -184,7 +193,7 @@ async function mainMenu() {
             installGrassclipper();
             break;
         case "3":
-            installGrassclipperX();
+            await downloadAndInstall("GrassClipper-X", "GrassClipper-X-1.0.0-win-x64.7z", installGrassclipperX);
             break;
         case "4":
             process.exit(0);
