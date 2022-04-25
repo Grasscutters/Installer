@@ -1,0 +1,8 @@
+# Builds
+builds/
+
+# Node Modules
+node_modules/
+
+# Environment
+.env/
