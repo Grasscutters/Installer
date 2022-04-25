@@ -45,11 +45,6 @@ async function downloadAndInstall(application, file, installCallback = undefined
     if(installCallback) await installCallback(`${tempDirectory}/${file}`);
 }
 
-async function extractTo(file, destination) {
-    const contents = fs.createReadStream(file);
-    contents.pipe(unzip.Extract({path: destination}));
-}
-
 function exit() {
     console.log("Press any key to return to the main menu.");
     process.stdin.setRawMode(true);
