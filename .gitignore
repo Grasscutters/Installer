@@ -6,3 +6,9 @@ node_modules/
 
 # Environment
 .env/
+
+# IntelliJ IDEA
+.idea/
+
+# VS Code
+.vscode/
